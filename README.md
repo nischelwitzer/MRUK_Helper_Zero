@@ -3,7 +3,7 @@
 
 Sets a new ZeroGizmo at the SCREEN MRUK Object. Transformation of the Unity/MRUK Coordinate System to the new CenterPoint.
 
-![MRUK Example Scene Habitat](/assets/habitat.jpg)
+![MRUK Example Scene Habitat](/assets/scene_habitat_touchit.jpg)
 
 ## Habitat
 
