@@ -11,7 +11,6 @@ using System.Drawing;
 // XR_Room.cs und XR_RoomMap.cs
 // C:\Data\1_dev\1_unity\2025_habitat\CoSA_MR_Habitat\Assets\Scripts\XR\Details
 
-
 // Author: AK Nischelwitzer
 // Date: 2025-05-18
 //
@@ -32,35 +31,20 @@ namespace Meta.XR.MRUtilityKit
         [SerializeField, Tooltip("When using surface spawning, use this to filter which anchor labels should be included. Eg, spawn only on TABLE or OTHER.")]
         public MRUKAnchor.SceneLabels Labels = ~(MRUKAnchor.SceneLabels)0;
 
-        // MRUK Anchors
-        public MRUKAnchor screenAnchor { get; private set; }
-
         // MRUK Positions
-        public Vector3 screenCenter { get; private set; }
         public float FloorLevel { get; private set; }
         public float CeilingLevel { get; private set; }
 
         public LineRenderer lineRendererObject;
 
+        // Parameters for the translation and rotation
+        private Vector2 transformPosition = new Vector2(0, 0); // translation vector
+        private float transformRotation = 0;                   // rotation angle in degrees
+
         void Start()
         {
             Debug.Log("***** MRUKZERO: waiting for MRUK Scene to be ready...");
             Debug.Log("***** MRUK Version: " + typeof(MRUK).Assembly.GetName().Version);
-        }
-
-
-        Vector2 TranslateAndRotate(Vector2 point, Vector2 translation, float angleDeg)
-        {
-            float rad = angleDeg * Mathf.Deg2Rad;
-            float cos = Mathf.Cos(rad);
-            float sin = Mathf.Sin(rad);
-            point = point + translation; 
-            Vector2 rotated = new Vector2(
-                point.x * cos - point.y * sin,
-                point.x * sin + point.y * cos
-            );
-
-            return rotated;
         }
 
         public void StartSpawn()
@@ -70,6 +54,10 @@ namespace Meta.XR.MRUtilityKit
             {
                 Debug.LogError("***** MRUKZERO: No room found to spawn in.");
             }
+
+            // ------------------------------------------------------------------------------------------------------
+            // FLOOR and CEILING Anchor
+            // get Room height
 
             Vector3 floorZero = MRUK.Instance.GetCurrentRoom().FloorAnchor.transform.position;
             FloorLevel = floorZero.y;
@@ -87,38 +75,40 @@ namespace Meta.XR.MRUtilityKit
             // Calculate validation data
             if (allScreensAnchors.Count == 1) // only one SCREEN Anchor is allowed 
             {
-                Vector3 screenPositionZero = allScreensAnchors[0].transform.position; // center for roomZero calculation
-                Quaternion screenRotationZero = allScreensAnchors[0].transform.rotation;
+                // screenAnchor = MRUK.Instance.GetCurrentRoom().FindLargestSurface(MRUKAnchor.SceneLabels.SCREEN);
 
-                screenAnchor = MRUK.Instance.GetCurrentRoom().FindLargestSurface(MRUKAnchor.SceneLabels.SCREEN);
-                screenCenter = screenAnchor.GetAnchorCenter(); // Object with label SCREEN
-                Quaternion screenRotation = screenAnchor.transform.rotation;
+                // ------------------------------------------------------------------------------------------------------
+                // SCREEN Anchor
+                // get MAIN postion INFOS
+
+                Vector3 screenPositionZero    = allScreensAnchors[0].transform.position; // center for roomZero calculation
+                Quaternion screenRotationZero = allScreensAnchors[0].transform.rotation;
+                Vector3 screenCenterZero      = allScreensAnchors[0].GetAnchorCenter();  // screenAnchor.VolumeBounds.Value.center
+                Vector3 screenExtents         = allScreensAnchors[0].VolumeBounds.Value.extents; // for finding the 8 corners of the screen
 
                 // SpawnObject.transform.localPosition = ScreenCenter;
                 // Vector3 worldPoint = ScreenAnchor.transform.TransformPoint(localPoint);
-
                 // ------------------------------------------------------------------------------------------------------
-                // SCREEN -Anchor
+                // set GIZMO to SCREEN Center
 
-                gizmoSceenCenterObject.transform.position = screenCenter;
-                GameObject.Find("TransformInScreen").transform.position = screenCenter;
-                GameObject.Find("RotationInScreen").transform.rotation = screenRotation;
-                Debug.Log("***** MRUKZERO: SCREEN-Anchor position " + screenPositionZero + " " + screenCenter); // second smaller on Y
-                Debug.Log("***** MRUKZERO: SCREEN-Anchor rotation " + screenRotationZero + " " + screenRotation + " Euler:" + screenRotation.eulerAngles);
+                gizmoSceenCenterObject.transform.position = screenCenterZero;
+                GameObject.Find("TransformInScreen").transform.position = screenCenterZero;
+                GameObject.Find("RotationInScreen").transform.rotation = screenRotationZero;
+                Debug.Log("***** MRUKZERO: SCREEN-Anchor position " + screenPositionZero + " " + screenCenterZero); // second smaller on Y
+                Debug.Log("***** MRUKZERO: SCREEN-Anchor rotation " + screenRotationZero + " " + screenRotationZero + " Euler:" + screenRotationZero.eulerAngles);
 
                 // ------------------------------------------------------------------------------------------------------
                 // DRAW CORNER
+                // draw the center floor object "basket ball"
 
-                // draw the center floor object
-                Transform cornerParentRotation = GameObject.Find("zeroScreenRotationCornerPoints").transform;
+                Transform cornerParentRotation    = GameObject.Find("zeroScreenRotationCornerPoints").transform;
                 Transform cornerParentTranslation = GameObject.Find("zeroScreenTransformCornerPoints").transform;
-                Vector3 screenCenterFloor = new(screenCenter.x, FloorLevel, screenCenter.z);
+                Vector3 screenCenterFloor = new(screenCenterZero.x, FloorLevel, screenCenterZero.z);
                 Instantiate(centerObject, Vector3.zero, Quaternion.identity, cornerParentTranslation);
-
+                
                 Debug.Log("***** MRUKZERO: ScreenCenterFloor " + screenCenterFloor);
                 // CORNER OBJECTS calc corners
-                Vector3 screenExtents = screenAnchor.VolumeBounds.Value.extents;
-                Debug.Log("***** MRUKZERO: SCREEN-Extents: " + screenExtents + " Vol:" + screenAnchor.VolumeBounds.Value.center);
+                Debug.Log("***** MRUKZERO: SCREEN-Extents: " + screenExtents + " Vol:" + screenCenterZero);
 
                 // create 8 corners of the screen and center
                 // MRUK XZY 
@@ -140,14 +130,9 @@ namespace Meta.XR.MRUtilityKit
                 cornerPoints[6].name = "cornerUp3";
                 cornerPoints[7].name = "cornerUp4";
 
-                // shift the UNITY-3D-World to the MRUK-World - SCREEN sets ZERO 
-                Transform positionMRUK2Room = GameObject.Find("Position2Room").transform;
-                Transform rotationMRUK2Room = GameObject.Find("Rotation2Room").transform; // 2) rotate the coordinate system
-                // Transform positionShift2MRUK = GameObject.Find("PositionShift2MRUK").transform;
-
                 // set positions of the corners
                 cornerParentTranslation.position = screenCenterFloor;
-                cornerParentRotation.rotation = Quaternion.Euler(0, screenRotation.eulerAngles.y, 0);
+                cornerParentRotation.rotation = Quaternion.Euler(0, screenRotationZero.eulerAngles.y, 0);
 
                 // FIND ROOM CENTER
                 // find the largest distance to the unity zero point
@@ -176,7 +161,7 @@ namespace Meta.XR.MRUtilityKit
 
                 // FOUND Room Zero ;) 
                 Transform roomZero = cornerPoints[maxIndex].transform;  // farest corner from the SCREEN found
-                Debug.Log("MRUK RoomZero found max-dist: " + maxDist + " at index: " + maxIndex + " position: " + roomZero);
+                Debug.Log("***** MRUKZERO: RoomZero found max-dist: " + maxDist + " at index: " + maxIndex + " position: " + roomZero);
 
                 // ------------------------------------------------------------------------------------------------------
                 // draw line from unityZero (MRUKZero) to new roomZero
@@ -191,20 +176,20 @@ namespace Meta.XR.MRUtilityKit
                 line2realRoomCenter.positionCount = 2;
                 line2realRoomCenter.SetPosition(0, roomZero.position); // red point
                 line2realRoomCenter.SetPosition(1, new Vector3(floorZero.x, 0, floorZero.z)); // real roomCenterPoint inside Room and used for roomZeroPoint Calculation 
-                // not Vector3.zero !!! because it can also be outside from the room!
-
+                                                                                              // not Vector3.zero !!! because it can also be outside from the room!
 
                 // ======================================================================================================
                 // ------------------------------------------------------------------------------------------------------
-                // TRANSFORMATION
+                // TRANSFORMATION -here it happens
                 // move the gizmo to the room zero position (farest corner from the SCREEN) for easy unity construction
 
-                positionMRUK2Room.position = roomZero.position;                                      // 1) move to position, farest corner from "SCREEN"
-                rotationMRUK2Room.rotation = Quaternion.Euler(0, screenRotation.eulerAngles.y, 0);   // 2) rotation to MR_UK
+                Transform positionMRUK2Room = GameObject.Find("Position2Room").transform;
+                Transform rotationMRUK2Room = GameObject.Find("Rotation2Room").transform; 
+                positionMRUK2Room.position = roomZero.position + new Vector3(0, -FloorLevel, 0);                                          // 1) move to position, farest corner from "SCREEN"
+                rotationMRUK2Room.rotation = Quaternion.Euler(0, screenRotationZero.eulerAngles.y, 0);   // 2) rotation to MR_UK
 
                 // ------------------------------------------------------------------------------------------------------
                 // ======================================================================================================
-
                 // RED small REFERENZ POINT
                 // check damit linie RoomZero zu UnityZero im ersten Quadranten ist
 
@@ -214,10 +199,10 @@ namespace Meta.XR.MRUtilityKit
                 line2RefPoint.SetPosition(0, roomZero.position); // red point
                 line2RefPoint.SetPosition(1, referenzPoint.position);
 
-                Debug.Log("MRUK RefPoint: " + referenzPoint.position + referenzPoint.eulerAngles); // immer 45 Grad   
-                                                                                                   // ------------------------------------------------------------------------------------------------------
+                Debug.Log("***** MRUKZERO: RefPoint: " + referenzPoint.position + referenzPoint.eulerAngles); // immer 45 Grad   
                 // ------------------------------------------------------------------------------------------------------
-                // KORREKTUR Quadranten
+                // ------------------------------------------------------------------------------------------------------
+                // KORREKTUR Quadranten Berechnung
                 // float angleSigned = Vector2.SignedAngle(a, b);
 
                 float angleKorrektur = 0;
@@ -232,7 +217,11 @@ namespace Meta.XR.MRUtilityKit
                 if (checkAngle >= 90f && checkAngle < 180f) angleKorrektur   = 180;
                 if (checkAngle >= 180f && checkAngle < 270f) angleKorrektur  = 90;
                 if (checkAngle >= 270f && checkAngle <= 360f) angleKorrektur = 0;
-                rotationMRUK2Room.rotation = Quaternion.Euler(0, screenRotation.eulerAngles.y + angleKorrektur, 0);
+
+                // ...and USE the CORRECTION ANGLE 
+                transformPosition = referenzPoint.position;
+                transformRotation = screenRotationZero.eulerAngles.y + angleKorrektur;
+                rotationMRUK2Room.rotation = Quaternion.Euler(0, screenRotationZero.eulerAngles.y + angleKorrektur, 0);
                 Debug.Log("***** MRUKZERO: realFloorCenterAngle: " + realFloorCenterAngle + " refPointAngle: " + referenzPointAngle + " >> AngleKorrektur: " + angleKorrektur + " checkAngle: "+checkAngle);
             }
             else
@@ -240,5 +229,24 @@ namespace Meta.XR.MRUtilityKit
                 Debug.LogError("***** MRUKZERO: Room is invalid: Only exactly 1 SCREEN (for UnityZeroTransform) allowed, found " + allScreensAnchors.Count);
             }
         }
+
+        // ------------------------------------------------------------------------------------------------------
+        // HELPER
+
+        // Transform a Point to the "OWN ZERO" coordinate System
+        Vector2 ZeroTransformation(Vector2 point)
+        {
+            float rad = transformRotation * Mathf.Deg2Rad;
+            float cos = Mathf.Cos(rad);
+            float sin = Mathf.Sin(rad);
+            point = point + transformPosition;
+            Vector2 rotatedPoint = new Vector2(
+                point.x * cos - point.y * sin,
+                point.x * sin + point.y * cos
+            );
+
+            return rotatedPoint;
+        }
+
     }
 }
